@@ -9,22 +9,21 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Timer
@@ -37,7 +36,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
@@ -47,15 +45,9 @@ import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 import java.util.Locale
 
-enum class ServerRegion(val title: String, val offset: ZoneOffset) {
-    EU("EU (UTC+2)", ZoneOffset.ofHours(2)),
-    NA_EAST("NA East (UTC-4)", ZoneOffset.ofHours(-4)),
-    NA_WEST("NA West (UTC-7)", ZoneOffset.ofHours(-7)),
-    SA("SA (UTC-3)", ZoneOffset.ofHours(-3)),
-    JP("JP (UTC+9)", ZoneOffset.ofHours(9)),
-    TW("TW (UTC+8)", ZoneOffset.ofHours(8)),
-    KR("KR (UTC+9)", ZoneOffset.ofHours(9))
-}
+// Фиксированный часовой пояс сервера EU (UTC+2)
+val SERVER_ZONE: ZoneOffset = ZoneOffset.ofHours(2)
+val COLOR_TIMER_YELLOW = Color(0xFFFFB74D)
 
 enum class EventCategory(val label: String) {
     ALL("Все"),
@@ -70,39 +62,60 @@ data class GameSchedule(
     val title: String,
     val category: EventCategory,
     val scheduleDesc: String,
-    val calculateNextEpochMillis: (region: ServerRegion) -> Long
+    val calculateNextEpochMillis: () -> Long
 )
 
 object ScheduleRepository {
     val events = listOf(
-        GameSchedule("rift_continuum", "Разлом континуума", EventCategory.RIFTS, "каждые 3 ч, с 02:00") { region ->
-            getNextIntervalTime(region, 2, 3, 0)
+        // Разломы
+        GameSchedule("rift_continuum", "Разлом континуума", EventCategory.RIFTS, "каждые 3 ч, начиная с 02:00") {
+            getNextIntervalTime(startHour = 2, intervalHours = 3, minute = 0)
         },
-        GameSchedule("boss_kaira", "Дозорщик Кайра", EventCategory.BOSSES, "каждые 3 ч, с 01:00") { region ->
-            getNextIntervalTime(region, 1, 3, 0)
+        // События
+        GameSchedule("event_shigo", "Фестиваль шиго", EventCategory.EVENTS, "каждый час в :00") {
+            getNextHourlyTime(0)
         },
-        GameSchedule("boss_tamasa", "Исполнитель Тамаса", EventCategory.BOSSES, "пн, чт, сб в 21:30") { region ->
-            getNextWeeklyTime(region, listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
+        GameSchedule("event_invasion", "Вторжение из измерения", EventCategory.EVENTS, "каждый час в :30") {
+            getNextHourlyTime(30)
         },
-        GameSchedule("boss_nahma", "Лорд-хранитель Нахма", EventCategory.BOSSES, "вс, пт в 21:00") { region ->
-            getNextWeeklyTime(region, listOf(DayOfWeek.FRIDAY, DayOfWeek.SUNDAY), 21, 0)
+        // Мировые Боссы
+        GameSchedule("boss_kaira_watcher", "Дозорщик Кайра", EventCategory.BOSSES, "каждые 3 ч, начиная с 01:00") {
+            getNextIntervalTime(startHour = 1, intervalHours = 3, minute = 0)
         },
-        GameSchedule("abyss_artifacts", "Захват артефактов", EventCategory.ABYSS, "пн, чт, сб в 21:00") { region ->
-            getNextWeeklyTime(region, listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 0)
+        // Abyss
+        GameSchedule("abyss_artifacts", "Захват артефактов", EventCategory.ABYSS, "пн, чт, сб в 21:00") {
+            getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 0)
         },
-        GameSchedule("event_shigo", "Фестиваль шиго", EventCategory.EVENTS, "каждый час в :00") { region ->
-            getNextHourlyTime(region, 0)
+        // Мировые Боссы
+        GameSchedule("boss_tamasa", "Исполнитель Тамаса", EventCategory.BOSSES, "пн, чт, сб в 21:30") {
+            getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
-        GameSchedule("event_invasion", "Вторжение из измерения", EventCategory.EVENTS, "каждый час в :30") { region ->
-            getNextHourlyTime(region, 30)
+        GameSchedule("boss_agro", "Исполнитель Агро", EventCategory.BOSSES, "пн, чт, сб в 21:30") {
+            getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
-        GameSchedule("event_arena", "Арена стратегии", EventCategory.EVENTS, "ежедневно в 11:00, 19:00") { region ->
-            getNextDailyTimes(region, listOf(11 to 0, 19 to 0))
+        GameSchedule("boss_kaira_executor", "Исполнитель Кайра", EventCategory.BOSSES, "пн, чт, сб в 21:30") {
+            getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
+        },
+        GameSchedule("boss_nahma", "Лорд-хранитель Нахма", EventCategory.BOSSES, "вс, пт в 21:00") {
+            getNextWeeklyTime(listOf(DayOfWeek.FRIDAY, DayOfWeek.SUNDAY), 21, 0)
+        },
+        GameSchedule("boss_nahma_enraged", "Разъяренный лорд-хранитель Нахма", EventCategory.BOSSES, "вс, пт в 21:00") {
+            getNextWeeklyTime(listOf(DayOfWeek.FRIDAY, DayOfWeek.SUNDAY), 21, 0)
+        },
+        // События
+        GameSchedule("event_arena", "Арена стратегии", EventCategory.EVENTS, "ежедневно в 11:00, 19:00") {
+            getNextDailyTimes(listOf(11 to 0, 19 to 0))
+        },
+        GameSchedule("event_daily_reset", "Ежедневный сброс", EventCategory.EVENTS, "ежедневно в 03:00") {
+            getNextDailyTimes(listOf(3 to 0))
+        },
+        GameSchedule("event_weekly_reset", "Еженедельный сброс", EventCategory.EVENTS, "ср в 03:00") {
+            getNextWeeklyTime(listOf(DayOfWeek.WEDNESDAY), 3, 0)
         }
     )
 
-    private fun getNextIntervalTime(region: ServerRegion, startHour: Int, intervalHours: Int, minute: Int): Long {
-        val now = ZonedDateTime.now(region.offset)
+    private fun getNextIntervalTime(startHour: Int, intervalHours: Int, minute: Int): Long {
+        val now = ZonedDateTime.now(SERVER_ZONE)
         var target = now.withMinute(minute).withSecond(0).withNano(0)
         val hours = (startHour until 24 step intervalHours).toList()
         val nextHour = hours.firstOrNull { it > now.hour || (it == now.hour && now.minute < minute) }
@@ -110,25 +123,25 @@ object ScheduleRepository {
         return target.toInstant().toEpochMilli()
     }
 
-    private fun getNextHourlyTime(region: ServerRegion, minute: Int): Long {
-        val now = ZonedDateTime.now(region.offset)
+    private fun getNextHourlyTime(minute: Int): Long {
+        val now = ZonedDateTime.now(SERVER_ZONE)
         var target = now.withMinute(minute).withSecond(0).withNano(0)
         if (now.minute >= minute) target = target.plusHours(1)
         return target.toInstant().toEpochMilli()
     }
 
-    private fun getNextDailyTimes(region: ServerRegion, times: List<Pair<Int, Int>>): Long {
-        val now = ZonedDateTime.now(region.offset)
-        val sortedCandidates = times.map { (h, m) ->
+    private fun getNextDailyTimes(times: List<Pair<Int, Int>>): Long {
+        val now = ZonedDateTime.now(SERVER_ZONE)
+        val candidates = times.map { (h, m) ->
             var dt = now.withHour(h).withMinute(m).withSecond(0).withNano(0)
             if (dt.isBefore(now)) dt = dt.plusDays(1)
             dt
         }.sorted()
-        return sortedCandidates.first().toInstant().toEpochMilli()
+        return candidates.first().toInstant().toEpochMilli()
     }
 
-    private fun getNextWeeklyTime(region: ServerRegion, days: List<DayOfWeek>, hour: Int, minute: Int): Long {
-        val now = ZonedDateTime.now(region.offset)
+    private fun getNextWeeklyTime(days: List<DayOfWeek>, hour: Int, minute: Int): Long {
+        val now = ZonedDateTime.now(SERVER_ZONE)
         val candidates = days.map { day ->
             var dt = now.with(TemporalAdjusters.nextOrSame(day)).withHour(hour).withMinute(minute).withSecond(0).withNano(0)
             if (dt.isBefore(now)) dt = dt.plusWeeks(1)
@@ -140,22 +153,43 @@ object ScheduleRepository {
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val title = intent.getStringExtra("EXTRA_TITLE") ?: "Aion 2"
-        val msg = intent.getStringExtra("EXTRA_MSG") ?: "Событие скоро начнется!"
-        val channelId = "aion2_ch"
+        val title = intent.getStringExtra("EXTRA_TITLE") ?: "Aion 2 Событие"
+        val leadMin = intent.getIntExtra("EXTRA_LEAD", 5)
+        val channelId = "aion2_alert_channel"
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            nm.createNotificationChannel(NotificationChannel(channelId, "Aion 2 Напоминания", NotificationManager.IMPORTANCE_HIGH))
+            val channel = NotificationChannel(
+                channelId,
+                "Aion 2 Оповещения",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Напоминания о событиях и боссах"
+                enableVibration(true)
+            }
+            nm.createNotificationChannel(channel)
         }
 
+        val openApp = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pi = PendingIntent.getActivity(
+            context,
+            0,
+            openApp,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("⚔️ $title")
-            .setContentText(msg)
-            .setAutoCancel(true)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle(title)
+            .setContentText("Событие начнется через $leadMin мин!")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_EVENT)
+            .setAutoCancel(true)
+            .setContentIntent(pi)
             .build()
+
         nm.notify(title.hashCode(), notification)
     }
 }
@@ -177,10 +211,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppScreen() {
     var tab by remember { mutableIntStateOf(0) }
-    var region by remember { mutableStateOf(ServerRegion.EU) }
     var category by remember { mutableStateOf(EventCategory.ALL) }
     var leadMin by remember { mutableIntStateOf(5) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val activeAlarms = remember { mutableStateMapOf<String, Boolean>() }
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -201,77 +236,152 @@ fun AppScreen() {
                 NavigationBarItem(
                     selected = tab == 1,
                     onClick = { tab = 1 },
-                    icon = { Icon(Icons.Default.Language, "Сайт") },
-                    label = { Text("Сайт и Карта") }
+                    icon = { Icon(Icons.Default.ListAlt, "Полное расписание") },
+                    label = { Text("Полное расписание") }
                 )
             }
         }
     ) { p ->
-        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0E1118)).padding(p)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0E1118))
+                .padding(p)
+        ) {
             if (tab == 0) {
-                val context = LocalContext.current
-                val alarms = remember { mutableStateMapOf<String, Boolean>() }
+                Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
+                    // Статичная надпись сервера
+                    Text(
+                        text = "Сервер — EU (UTC+2)",
+                        color = Color(0xFF90CAF9),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
 
-                Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
-                    Text("Сервер:", color = Color.Gray, fontSize = 12.sp)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
-                        items(ServerRegion.values()) { r ->
-                            FilterChip(selected = r == region, onClick = { region = r }, label = { Text(r.title, fontSize = 11.sp) })
-                        }
-                    }
-
-                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Оповестить за:", color = Color.LightGray, fontSize = 12.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            listOf(1, 3, 5, 10).forEach { m ->
-                                SuggestionChip(
-                                    onClick = { leadMin = m },
-                                    label = { Text("$m мин", color = if (leadMin == m) Color.Cyan else Color.White) }
-                                )
+                    // Блок выбора времени оповещения (исправлены размеры для Samsung S25)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Оповестить за:", color = Color.LightGray, fontSize = 13.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(1, 3, 5, 10).forEach { mins ->
+                                val isSelected = leadMin == mins
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSelected) Color(0xFF233044) else Color(0xFF181C26),
+                                    border = androidx.compose.foundation.BorderStroke(
+                                        1.dp,
+                                        if (isSelected) COLOR_TIMER_YELLOW else Color(0xFF2C3242)
+                                    ),
+                                    modifier = Modifier.clickable { leadMin = mins }
+                                ) {
+                                    Text(
+                                        text = "$mins мин",
+                                        color = if (isSelected) COLOR_TIMER_YELLOW else Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                    )
+                                }
                             }
                         }
                     }
 
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                    // Фильтр категорий
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    ) {
                         items(EventCategory.values()) { c ->
-                            FilterChip(selected = c == category, onClick = { category = c }, label = { Text(c.label) })
+                            FilterChip(
+                                selected = c == category,
+                                onClick = { category = c },
+                                label = { Text(c.label, fontSize = 12.sp) }
+                            )
                         }
                     }
 
+                    // Список таймеров
                     val list = ScheduleRepository.events.filter { category == EventCategory.ALL || it.category == category }
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(list) { ev ->
-                            val next = ev.calculateNextEpochMillis(region)
+                            val next = ev.calculateNextEpochMillis()
                             val diff = (next - now) / 1000
-                            val on = alarms[ev.id] == true
+                            val isOn = activeAlarms[ev.id] == true
 
-                            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1F2C))) {
-                                Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1F2C)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(ev.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                                        Text(ev.scheduleDesc, color = Color.Gray, fontSize = 12.sp)
+                                        Text(
+                                            text = ev.title,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp
+                                        )
+                                        Text(
+                                            text = ev.scheduleDesc,
+                                            color = Color.Gray,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.padding(vertical = 2.dp)
+                                        )
                                         val timeStr = if (diff <= 0) "● В эфире" else "через " + formatSec(diff)
-                                        Text(timeStr, color = if (diff <= 0) Color.Green else Color(0xFFFFB74D), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                        Text(
+                                            text = timeStr,
+                                            color = if (diff <= 0) Color(0xFF00E676) else COLOR_TIMER_YELLOW,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp
+                                        )
                                     }
+
                                     IconButton(onClick = {
-                                        val state = !on
-                                        alarms[ev.id] = state
+                                        val newState = !isOn
+                                        activeAlarms[ev.id] = newState
                                         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
                                         val intent = Intent(context, AlarmReceiver::class.java).apply {
                                             putExtra("EXTRA_TITLE", ev.title)
-                                            putExtra("EXTRA_MSG", "Начнется через $leadMin мин!")
+                                            putExtra("EXTRA_LEAD", leadMin)
                                         }
-                                        val pi = PendingIntent.getBroadcast(context, ev.id.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                                        if (state) {
-                                            val trigger = next - (leadMin * 60 * 1000)
-                                            if (trigger > System.currentTimeMillis()) {
-                                                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi)
+                                        val pi = PendingIntent.getBroadcast(
+                                            context,
+                                            ev.id.hashCode(),
+                                            intent,
+                                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                                        )
+
+                                        if (newState) {
+                                            val triggerTime = next - (leadMin * 60 * 1000L)
+                                            if (triggerTime > System.currentTimeMillis()) {
+                                                try {
+                                                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pi)
+                                                } catch (e: SecurityException) {
+                                                    am.set(AlarmManager.RTC_WAKEUP, triggerTime, pi)
+                                                }
+                                                Toast.makeText(context, "Оповещение включено: ${ev.title} (за $leadMin мин)", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "Событие начнется быстрее, чем за $leadMin мин!", Toast.LENGTH_SHORT).show()
                                             }
                                         } else {
                                             am.cancel(pi)
+                                            Toast.makeText(context, "Оповещение выключено: ${ev.title}", Toast.LENGTH_SHORT).show()
                                         }
                                     }) {
-                                        Icon(if (on) Icons.Default.NotificationsActive else Icons.Default.Notifications, null, tint = if (on) Color.Cyan else Color.Gray)
+                                        Icon(
+                                            imageVector = if (isOn) Icons.Default.NotificationsActive else Icons.Default.Notifications,
+                                            contentDescription = "Колокольчик",
+                                            tint = if (isOn) COLOR_TIMER_YELLOW else Color.Gray,
+                                            modifier = Modifier.size(26.dp)
+                                        )
                                     }
                                 }
                             }
@@ -279,13 +389,55 @@ fun AppScreen() {
                     }
                 }
             } else {
-                AndroidView(factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        webViewClient = WebViewClient()
-                        loadUrl("https://gamers4.life/aion-2/database/ru/events/")
+                // Вкладка «Полное расписание» со второго скриншота
+                FullScheduleScreen()
+            }
+        }
+    }
+}
+
+@Composable
+fun FullScheduleScreen() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(14.dp)
+    ) {
+        Text(
+            text = "Полное расписание (время сервера) · EU · UTC+2",
+            color = COLOR_TIMER_YELLOW,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(ScheduleRepository.events) { ev ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF151923)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1.2f)) {
+                            Text(ev.title, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(ev.category.label, color = Color(0xFF64B5F6), fontSize = 11.sp)
+                        }
+                        Text(
+                            text = ev.scheduleDesc,
+                            color = Color(0xFFB0BEC5),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            modifier = Modifier.weight(1f),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                        )
                     }
-                }, modifier = Modifier.fillMaxSize())
+                }
             }
         }
     }
