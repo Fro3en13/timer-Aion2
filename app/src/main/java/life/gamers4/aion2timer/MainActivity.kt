@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -34,10 +35,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
@@ -80,7 +82,6 @@ object ScheduleRepository {
         GameSchedule("event_invasion", "Вторжение из измерения", EventCategory.EVENTS, "каждый час в :30") {
             getNextHourlyTime(30)
         },
-        // Дозорщик Кайра (файл res/drawable/boss_kaira.png)
         GameSchedule(
             id = "boss_kaira_watcher",
             title = "Дозорщик Кайра",
@@ -93,7 +94,6 @@ object ScheduleRepository {
         GameSchedule("abyss_artifacts", "Захват артефактов", EventCategory.ABYSS, "пн, чт, сб в 21:00") {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 0)
         },
-        // Исполнитель Тамаса (файл res/drawable/boss_tamasa.png)
         GameSchedule(
             id = "boss_tamasa",
             title = "Исполнитель Тамаса",
@@ -165,51 +165,53 @@ object ScheduleRepository {
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val title = intent.getStringExtra("EXTRA_TITLE") ?: "Aion 2 Событие"
-        val leadMin = intent.getIntExtra("EXTRA_LEAD", 5)
-        val iconResId = intent.getIntExtra("EXTRA_ICON_RES", 0)
-        val channelId = "aion2_alert_channel"
-        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        try {
+            val title = intent.getStringExtra("EXTRA_TITLE") ?: "Aion 2 Событие"
+            val leadMin = intent.getIntExtra("EXTRA_LEAD", 5)
+            val iconResId = intent.getIntExtra("EXTRA_ICON_RES", 0)
+            val channelId = "aion2_alert_channel"
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "Aion 2 Оповещения",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Напоминания о событиях и боссах"
-                enableVibration(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    channelId,
+                    "Aion 2 Оповещения",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Напоминания о событиях и боссах"
+                    enableVibration(true)
+                }
+                nm.createNotificationChannel(channel)
             }
-            nm.createNotificationChannel(channel)
-        }
 
-        val openApp = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        }
-        val pi = PendingIntent.getActivity(
-            context,
-            0,
-            openApp,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+            val openApp = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+            val pi = PendingIntent.getActivity(
+                context,
+                0,
+                openApp,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
 
-        val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_popup_reminder)
-            .setContentTitle(title)
-            .setContentText("Событие начнется через $leadMin мин!")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_EVENT)
-            .setAutoCancel(true)
-            .setContentIntent(pi)
+            val builder = NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(android.R.drawable.ic_popup_reminder)
+                .setContentTitle(title)
+                .setContentText("Событие начнется через $leadMin мин!")
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_EVENT)
+                .setAutoCancel(true)
+                .setContentIntent(pi)
 
-        if (iconResId != 0) {
-            try {
+            if (iconResId != 0) {
                 val bmp = BitmapFactory.decodeResource(context.resources, iconResId)
-                if (bmp != null) builder.setLargeIcon(bmp)
-            } catch (_: Exception) {}
-        }
+                if (bmp != null && bmp.width > 1) {
+                    builder.setLargeIcon(bmp)
+                }
+            }
 
-        nm.notify(title.hashCode(), builder.build())
+            nm.notify(title.hashCode(), builder.build())
+        } catch (_: Throwable) {}
     }
 }
 
@@ -229,12 +231,21 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppScreen() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("aion2_prefs", Context.MODE_PRIVATE) }
+
     var tab by remember { mutableIntStateOf(0) }
     var category by remember { mutableStateOf(EventCategory.ALL) }
-    var leadMin by remember { mutableIntStateOf(5) }
+    var leadMin by remember { mutableIntStateOf(prefs.getInt("lead_min", 5)) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    val activeAlarms = remember { mutableStateMapOf<String, Boolean>() }
-    val context = LocalContext.current
+
+    val activeAlarms = remember {
+        mutableStateMapOf<String, Boolean>().apply {
+            ScheduleRepository.events.forEach { ev ->
+                put(ev.id, prefs.getBoolean("alarm_${ev.id}", false))
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -269,7 +280,7 @@ fun AppScreen() {
         ) {
             if (tab == 0) {
                 Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
-                    // Верхняя панель: Надпись сервера слева, логотип из файла ic_logo.png справа
+                    // Верхняя панель: Сервер слева, логотип справа
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -284,10 +295,9 @@ fun AppScreen() {
                             fontWeight = FontWeight.Bold
                         )
 
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_logo),
+                        SafeIcon(
+                            resId = R.drawable.ic_logo,
                             contentDescription = "Aion 2 Логотип",
-                            contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .size(50.dp)
                                 .padding(end = 4.dp)
@@ -306,11 +316,14 @@ fun AppScreen() {
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
                                     color = if (isSelected) Color(0xFF233044) else Color(0xFF181C26),
-                                    border = androidx.compose.foundation.BorderStroke(
+                                    border = BorderStroke(
                                         1.dp,
                                         if (isSelected) COLOR_TIMER_YELLOW else Color(0xFF2C3242)
                                     ),
-                                    modifier = Modifier.clickable { leadMin = mins }
+                                    modifier = Modifier.clickable {
+                                        leadMin = mins
+                                        prefs.edit().putInt("lead_min", mins).apply()
+                                    }
                                 ) {
                                     Text(
                                         text = "$mins мин",
@@ -339,7 +352,7 @@ fun AppScreen() {
 
                     val list = ScheduleRepository.events.filter { category == EventCategory.ALL || it.category == category }
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(list) { ev ->
+                        items(list, key = { it.id }) { ev ->
                             val next = ev.calculateNextEpochMillis()
                             val diff = (next - now) / 1000
                             val isOn = activeAlarms[ev.id] == true
@@ -375,12 +388,10 @@ fun AppScreen() {
                                         )
                                     }
 
-                                    // Прямая загрузка картинки босса из файла
                                     if (ev.iconResId != null) {
-                                        Image(
-                                            painter = painterResource(id = ev.iconResId),
+                                        SafeIcon(
+                                            resId = ev.iconResId,
                                             contentDescription = ev.title,
-                                            contentScale = ContentScale.Fit,
                                             modifier = Modifier
                                                 .size(56.dp)
                                                 .padding(horizontal = 4.dp)
@@ -390,38 +401,41 @@ fun AppScreen() {
                                     IconButton(onClick = {
                                         val newState = !isOn
                                         activeAlarms[ev.id] = newState
-                                        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                                        prefs.edit().putBoolean("alarm_${ev.id}", newState).apply()
 
-                                        val intent = Intent(context, AlarmReceiver::class.java).apply {
-                                            putExtra("EXTRA_TITLE", ev.title)
-                                            putExtra("EXTRA_LEAD", leadMin)
-                                            if (ev.iconResId != null) {
-                                                putExtra("EXTRA_ICON_RES", ev.iconResId)
-                                            }
-                                        }
-                                        val pi = PendingIntent.getBroadcast(
-                                            context,
-                                            ev.id.hashCode(),
-                                            intent,
-                                            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                                        )
-
-                                        if (newState) {
-                                            val triggerTime = next - (leadMin * 60 * 1000L)
-                                            if (triggerTime > System.currentTimeMillis()) {
-                                                try {
-                                                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pi)
-                                                } catch (e: SecurityException) {
-                                                    am.set(AlarmManager.RTC_WAKEUP, triggerTime, pi)
+                                        try {
+                                            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                                            val intent = Intent(context, AlarmReceiver::class.java).apply {
+                                                putExtra("EXTRA_TITLE", ev.title)
+                                                putExtra("EXTRA_LEAD", leadMin)
+                                                if (ev.iconResId != null) {
+                                                    putExtra("EXTRA_ICON_RES", ev.iconResId)
                                                 }
-                                                Toast.makeText(context, "Оповещение включено: ${ev.title} (за $leadMin мин)", Toast.LENGTH_SHORT).show()
-                                            } else {
-                                                Toast.makeText(context, "Событие начнется быстрее, чем за $leadMin мин!", Toast.LENGTH_SHORT).show()
                                             }
-                                        } else {
-                                            am.cancel(pi)
-                                            Toast.makeText(context, "Оповещение выключено: ${ev.title}", Toast.LENGTH_SHORT).show()
-                                        }
+                                            val pi = PendingIntent.getBroadcast(
+                                                context,
+                                                ev.id.hashCode(),
+                                                intent,
+                                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                                            )
+
+                                            if (newState) {
+                                                val triggerTime = next - (leadMin * 60 * 1000L)
+                                                if (triggerTime > System.currentTimeMillis()) {
+                                                    try {
+                                                        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pi)
+                                                    } catch (_: SecurityException) {
+                                                        am.set(AlarmManager.RTC_WAKEUP, triggerTime, pi)
+                                                    }
+                                                    Toast.makeText(context, "Оповещение включено: ${ev.title} (за $leadMin мин)", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "Событие начнется быстрее, чем за $leadMin мин!", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } else {
+                                                am.cancel(pi)
+                                                Toast.makeText(context, "Оповещение выключено: ${ev.title}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        } catch (_: Throwable) {}
                                     }) {
                                         Icon(
                                             imageVector = if (isOn) Icons.Default.NotificationsActive else Icons.Default.Notifications,
@@ -442,6 +456,28 @@ fun AppScreen() {
     }
 }
 
+// Защищенная загрузка картинок: никогда не вызывает сбой приложения
+@Composable
+fun SafeIcon(resId: Int, contentDescription: String?, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val bitmap = remember(resId) {
+        try {
+            val bmp = BitmapFactory.decodeResource(context.resources, resId)
+            if (bmp != null && bmp.width > 1) bmp.asImageBitmap() else null
+        } catch (_: Throwable) {
+            null
+        }
+    }
+    if (bitmap != null) {
+        Image(
+            bitmap = bitmap,
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Fit,
+            modifier = modifier
+        )
+    }
+}
+
 @Composable
 fun FullScheduleScreen() {
     Column(
@@ -458,7 +494,7 @@ fun FullScheduleScreen() {
         )
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(ScheduleRepository.events) { ev ->
+            items(ScheduleRepository.events, key = { it.id }) { ev ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF151923)),
                     shape = RoundedCornerShape(8.dp)
@@ -480,7 +516,7 @@ fun FullScheduleScreen() {
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Normal,
                             modifier = Modifier.weight(1f),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.End
+                            textAlign = TextAlign.End
                         )
                     }
                 }
