@@ -77,36 +77,45 @@ data class GameSchedule(
 
 object ScheduleRepository {
     val events = listOf(
+        // Разлом континуума
         GameSchedule("rift_continuum", "Разлом континуума", EventCategory.RIFTS, "каждые 3 ч, начиная с 02:00", R.drawable.rift_continuum) {
             getNextIntervalTime(2, 3, 0)
         },
-        GameSchedule("event_shigo", "Фестиваль шиго", EventCategory.EVENTS, "каждый час в :00") {
+        // Фестиваль шиго (привязан файл event_shigo.png)
+        GameSchedule("event_shigo", "Фестиваль шиго", EventCategory.EVENTS, "каждый час в :00", R.drawable.event_shigo) {
             getNextHourlyTime(0)
         },
-        GameSchedule("event_invasion", "Вторжение из измерения", EventCategory.EVENTS, "каждый час в :30") {
+        // Вторжение из измерения (привязан файл event_invasion.png)
+        GameSchedule("event_invasion", "Вторжение из измерения", EventCategory.EVENTS, "каждый час в :30", R.drawable.event_invasion) {
             getNextHourlyTime(30)
         },
+        // Дозорщик Кайра
         GameSchedule("boss_kaira_watcher", "Дозорщик Кайра", EventCategory.BOSSES, "каждые 3 ч, начиная с 01:00", R.drawable.boss_kaira) {
             getNextIntervalTime(1, 3, 0)
         },
-        GameSchedule("abyss_artifacts", "Захват артефактов", EventCategory.ABYSS, "пн, чт, сб в 21:00") {
+        // Захват артефактов (привязан файл abyss_artifacts.png)
+        GameSchedule("abyss_artifacts", "Захват артефактов", EventCategory.ABYSS, "пн, чт, сб в 21:00", R.drawable.abyss_artifacts) {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 0)
         },
+        // Исполнитель Тамаса
         GameSchedule("boss_tamasa", "Исполнитель Тамаса", EventCategory.BOSSES, "пн, чт, сб в 21:30", R.drawable.boss_tamasa) {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
+        // Исполнитель Агро
         GameSchedule("boss_agro", "Исполнитель Агро", EventCategory.BOSSES, "пн, чт, сб в 21:30", R.drawable.boss_agro) {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
         GameSchedule("boss_kaira_executor", "Исполнитель Кайра", EventCategory.BOSSES, "пн, чт, сб в 21:30") {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
+        // Лорд-хранитель Нахма
         GameSchedule("boss_nahma", "Лорд-хранитель Нахма", EventCategory.BOSSES, "вс, пт в 21:00", R.drawable.boss_nahma) {
             getNextWeeklyTime(listOf(DayOfWeek.FRIDAY, DayOfWeek.SUNDAY), 21, 0)
         },
         GameSchedule("boss_nahma_enraged", "Разъяренный лорд-хранитель Нахма", EventCategory.BOSSES, "вс, пт в 21:00", R.drawable.boss_nahma) {
             getNextWeeklyTime(listOf(DayOfWeek.FRIDAY, DayOfWeek.SUNDAY), 21, 0)
         },
+        // События
         GameSchedule("event_arena", "Арена стратегии", EventCategory.EVENTS, "ежедневно в 11:00, 19:00") {
             getNextDailyTimes(listOf(11 to 0, 19 to 0))
         },
@@ -174,7 +183,6 @@ class AlarmReceiver : BroadcastReceiver() {
             val iconResId = intent.getIntExtra("EXTRA_ICON_RES", 0)
             val channelId = "aion2_custom_music_channel"
 
-            // Подключаем вашу собственную мелодию aion2_sound.mp3
             val soundUri = Uri.parse("android.resource://" + context.packageName + "/" + R.raw.aion2_sound)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
