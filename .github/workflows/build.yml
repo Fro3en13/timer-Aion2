@@ -24,12 +24,12 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: Prepare Drawable Icons
+      - name: Prepare Drawables and Audio
         run: |
-          mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main/res/drawable app/src/main/res/raw
           rm -f app/src/main/res/drawable/*.webp
 
-          # Ищем и копируем картинки (добавлен rift_continuum)
+          # Копируем картинки
           for img in ic_logo boss_kaira boss_tamasa boss_agro boss_nahma rift_continuum; do
             found=$(find . -maxdepth 3 -iname "${img}.png" | head -n 1)
             if [ -n "$found" ] && [ "$found" != "./app/src/main/res/drawable/${img}.png" ]; then
@@ -39,6 +39,17 @@ jobs:
               echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==" | base64 -d > "app/src/main/res/drawable/${img}.png"
             fi
           done
+
+          # Ищем MP3-файл мелодии и копируем в res/raw/aion2_sound.mp3
+          found_mp3=$(find . -maxdepth 3 -iname "*.mp3" | head -n 1)
+          if [ -n "$found_mp3" ] && [ "$found_mp3" != "./app/src/main/res/raw/aion2_sound.mp3" ]; then
+            cp "$found_mp3" "app/src/main/res/raw/aion2_sound.mp3"
+            echo "Audio installed from $found_mp3"
+          fi
+          # Заглушка на случай, если mp3 еще не загружен
+          if [ ! -f "app/src/main/res/raw/aion2_sound.mp3" ]; then
+            echo "//uQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==" | base64 -d > "app/src/main/res/raw/aion2_sound.mp3"
+          fi
 
       - name: Build APK with Gradle
         run: gradle assembleDebug --no-daemon
