@@ -27,16 +27,14 @@ jobs:
       - name: Prepare Drawable Icons
         run: |
           mkdir -p app/src/main/res/drawable
-          # Удаляем старые поврежденные webp-файлы, из-за которых вылетало приложение
           rm -f app/src/main/res/drawable/*.webp
 
-          # Если вы загрузили PNG в корень репозитория — автоматически копируем их в drawable
-          for img in ic_logo boss_kaira boss_tamasa; do
+          # Ищем и копируем картинки (добавлен boss_nahma)
+          for img in ic_logo boss_kaira boss_tamasa boss_agro boss_nahma; do
             found=$(find . -maxdepth 3 -iname "${img}.png" | head -n 1)
             if [ -n "$found" ] && [ "$found" != "./app/src/main/res/drawable/${img}.png" ]; then
               cp "$found" "app/src/main/res/drawable/${img}.png"
             fi
-            # Если какой-то файл еще не загружен — ставим прозрачную заглушку 1x1, чтобы сборка не падала
             if [ ! -f "app/src/main/res/drawable/${img}.png" ]; then
               echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACklEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==" | base64 -d > "app/src/main/res/drawable/${img}.png"
             fi
