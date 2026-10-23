@@ -2,6 +2,7 @@ package life.gamers4.aion2timer
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -10,6 +11,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -38,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -73,79 +77,36 @@ data class GameSchedule(
 
 object ScheduleRepository {
     val events = listOf(
-        // Разлом континуума (привязан файл rift_continuum.png)
-        GameSchedule(
-            id = "rift_continuum",
-            title = "Разлом континуума",
-            category = EventCategory.RIFTS,
-            scheduleDesc = "каждые 3 ч, начиная с 02:00",
-            iconResId = R.drawable.rift_continuum
-        ) {
+        GameSchedule("rift_continuum", "Разлом континуума", EventCategory.RIFTS, "каждые 3 ч, начиная с 02:00", R.drawable.rift_continuum) {
             getNextIntervalTime(2, 3, 0)
         },
-        // События
         GameSchedule("event_shigo", "Фестиваль шиго", EventCategory.EVENTS, "каждый час в :00") {
             getNextHourlyTime(0)
         },
         GameSchedule("event_invasion", "Вторжение из измерения", EventCategory.EVENTS, "каждый час в :30") {
             getNextHourlyTime(30)
         },
-        // Дозорщик Кайра
-        GameSchedule(
-            id = "boss_kaira_watcher",
-            title = "Дозорщик Кайра",
-            category = EventCategory.BOSSES,
-            scheduleDesc = "каждые 3 ч, начиная с 01:00",
-            iconResId = R.drawable.boss_kaira
-        ) {
+        GameSchedule("boss_kaira_watcher", "Дозорщик Кайра", EventCategory.BOSSES, "каждые 3 ч, начиная с 01:00", R.drawable.boss_kaira) {
             getNextIntervalTime(1, 3, 0)
         },
         GameSchedule("abyss_artifacts", "Захват артефактов", EventCategory.ABYSS, "пн, чт, сб в 21:00") {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 0)
         },
-        // Исполнитель Тамаса
-        GameSchedule(
-            id = "boss_tamasa",
-            title = "Исполнитель Тамаса",
-            category = EventCategory.BOSSES,
-            scheduleDesc = "пн, чт, сб в 21:30",
-            iconResId = R.drawable.boss_tamasa
-        ) {
+        GameSchedule("boss_tamasa", "Исполнитель Тамаса", EventCategory.BOSSES, "пн, чт, сб в 21:30", R.drawable.boss_tamasa) {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
-        // Исполнитель Агро
-        GameSchedule(
-            id = "boss_agro",
-            title = "Исполнитель Агро",
-            category = EventCategory.BOSSES,
-            scheduleDesc = "пн, чт, сб в 21:30",
-            iconResId = R.drawable.boss_agro
-        ) {
+        GameSchedule("boss_agro", "Исполнитель Агро", EventCategory.BOSSES, "пн, чт, сб в 21:30", R.drawable.boss_agro) {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
         GameSchedule("boss_kaira_executor", "Исполнитель Кайра", EventCategory.BOSSES, "пн, чт, сб в 21:30") {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
-        // Лорд-хранитель Нахма
-        GameSchedule(
-            id = "boss_nahma",
-            title = "Лорд-хранитель Нахма",
-            category = EventCategory.BOSSES,
-            scheduleDesc = "вс, пт в 21:00",
-            iconResId = R.drawable.boss_nahma
-        ) {
+        GameSchedule("boss_nahma", "Лорд-хранитель Нахма", EventCategory.BOSSES, "вс, пт в 21:00", R.drawable.boss_nahma) {
             getNextWeeklyTime(listOf(DayOfWeek.FRIDAY, DayOfWeek.SUNDAY), 21, 0)
         },
-        GameSchedule(
-            id = "boss_nahma_enraged",
-            title = "Разъяренный лорд-хранитель Нахма",
-            category = EventCategory.BOSSES,
-            scheduleDesc = "вс, пт в 21:00",
-            iconResId = R.drawable.boss_nahma
-        ) {
+        GameSchedule("boss_nahma_enraged", "Разъяренный лорд-хранитель Нахма", EventCategory.BOSSES, "вс, пт в 21:00", R.drawable.boss_nahma) {
             getNextWeeklyTime(listOf(DayOfWeek.FRIDAY, DayOfWeek.SUNDAY), 21, 0)
         },
-        // События
         GameSchedule("event_arena", "Арена стратегии", EventCategory.EVENTS, "ежедневно в 11:00, 19:00") {
             getNextDailyTimes(listOf(11 to 0, 19 to 0))
         },
@@ -196,29 +157,66 @@ object ScheduleRepository {
 
 class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // Нажатие кнопки "ОК" под уведомлением
+        if (intent.action == "ACTION_DISMISS_ALARM") {
+            val notifId = intent.getIntExtra("EXTRA_NOTIF_ID", 0)
+            if (notifId != 0) {
+                nm.cancel(notifId)
+            }
+            return
+        }
+
+        // Срабатывание будильника
         try {
+            val eventId = intent.getStringExtra("EXTRA_ID") ?: return
             val title = intent.getStringExtra("EXTRA_TITLE") ?: "Aion 2 Событие"
             val leadMin = intent.getIntExtra("EXTRA_LEAD", 5)
             val iconResId = intent.getIntExtra("EXTRA_ICON_RES", 0)
-            val channelId = "aion2_alert_channel"
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channelId = "aion2_alarm_clock_channel"
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val audioAttributes = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .build()
+
                 val channel = NotificationChannel(
                     channelId,
-                    "Aion 2 Оповещения",
+                    "Aion 2 Будильник событий",
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "Напоминания о событиях и боссах"
+                    description = "Громкие оповещения о событиях"
                     enableVibration(true)
+                    vibrationPattern = longArrayOf(0, 600, 250, 600, 250, 600)
+                    setSound(soundUri, audioAttributes)
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 }
                 nm.createNotificationChannel(channel)
             }
 
+            val notifId = title.hashCode()
+
+            // Интент для кнопки "ОК"
+            val dismissIntent = Intent(context, AlarmReceiver::class.java).apply {
+                action = "ACTION_DISMISS_ALARM"
+                putExtra("EXTRA_NOTIF_ID", notifId)
+            }
+            val dismissPi = PendingIntent.getBroadcast(
+                context,
+                notifId,
+                dismissIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            // Открытие приложения по клику на тело уведомления
             val openApp = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             }
-            val pi = PendingIntent.getActivity(
+            val openPi = PendingIntent.getActivity(
                 context,
                 0,
                 openApp,
@@ -226,13 +224,16 @@ class AlarmReceiver : BroadcastReceiver() {
             )
 
             val builder = NotificationCompat.Builder(context, channelId)
-                .setSmallIcon(android.R.drawable.ic_popup_reminder)
-                .setContentTitle(title)
+                .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+                .setContentTitle("⚔️ $title")
                 .setContentText("Событие начнется через $leadMin мин!")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setCategory(NotificationCompat.CATEGORY_EVENT)
-                .setAutoCancel(true)
-                .setContentIntent(pi)
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setOngoing(true) // Нельзя смахнуть, пока не нажат "ОК"
+                .setAutoCancel(false)
+                .setContentIntent(openPi)
+                .addAction(android.R.drawable.checkbox_on_background, "ОК", dismissPi)
 
             if (iconResId != 0) {
                 val bmp = BitmapFactory.decodeResource(context.resources, iconResId)
@@ -241,13 +242,77 @@ class AlarmReceiver : BroadcastReceiver() {
                 }
             }
 
-            nm.notify(title.hashCode(), builder.build())
+            nm.notify(notifId, builder.build())
+
+            // Автоматически перезаводим будильник на следующий круг
+            val ev = ScheduleRepository.events.firstOrNull { it.id == eventId }
+            if (ev != null) {
+                scheduleExactAlarmClock(context, ev, leadMin)
+            }
         } catch (_: Throwable) {}
     }
 }
 
+// Полноценный системный будильник (AlarmClockInfo): работает даже при закрытом приложении
+fun scheduleExactAlarmClock(context: Context, ev: GameSchedule, leadMin: Int) {
+    try {
+        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val nextEpoch = ev.calculateNextEpochMillis()
+        val triggerTime = nextEpoch - (leadMin * 60 * 1000L)
+
+        if (triggerTime <= System.currentTimeMillis()) return
+
+        val showAppIntent = Intent(context, MainActivity::class.java)
+        val showPi = PendingIntent.getActivity(
+            context,
+            ev.id.hashCode(),
+            showAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val fireIntent = Intent(context, AlarmReceiver::class.java).apply {
+            action = "ACTION_FIRE_ALARM"
+            putExtra("EXTRA_ID", ev.id)
+            putExtra("EXTRA_TITLE", ev.title)
+            putExtra("EXTRA_LEAD", leadMin)
+            if (ev.iconResId != null) {
+                putExtra("EXTRA_ICON_RES", ev.iconResId)
+            }
+        }
+        val firePi = PendingIntent.getBroadcast(
+            context,
+            ev.id.hashCode(),
+            fireIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTime, showPi)
+        am.setAlarmClock(alarmClockInfo, firePi)
+    } catch (_: Throwable) {}
+}
+
+fun cancelAlarmClock(context: Context, evId: String) {
+    try {
+        val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val fireIntent = Intent(context, AlarmReceiver::class.java).apply {
+            action = "ACTION_FIRE_ALARM"
+        }
+        val firePi = PendingIntent.getBroadcast(
+            context,
+            evId.hashCode(),
+            fireIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        am.cancel(firePi)
+    } catch (_: Throwable) {}
+}
+
 class MainActivity : ComponentActivity() {
-    private val permLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    private val permLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (!isGranted) {
+            Toast.makeText(this, "Разрешите уведомления, чтобы будильник мог сработать!", Toast.LENGTH_LONG).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -273,7 +338,11 @@ fun AppScreen() {
     val activeAlarms = remember {
         mutableStateMapOf<String, Boolean>().apply {
             ScheduleRepository.events.forEach { ev ->
-                put(ev.id, prefs.getBoolean("alarm_${ev.id}", false))
+                val isSaved = prefs.getBoolean("alarm_${ev.id}", false)
+                put(ev.id, isSaved)
+                if (isSaved) {
+                    scheduleExactAlarmClock(context, ev, leadMin)
+                }
             }
         }
     }
@@ -288,17 +357,48 @@ fun AppScreen() {
     Scaffold(
         bottomBar = {
             NavigationBar(containerColor = Color(0xFF131722)) {
+                // Вкладка "Таймеры" с чисто белой надписью
                 NavigationBarItem(
                     selected = tab == 0,
                     onClick = { tab = 0 },
                     icon = { Icon(Icons.Default.Timer, "Таймеры") },
-                    label = { Text("Таймеры") }
+                    label = {
+                        Text(
+                            text = "Таймеры",
+                            color = Color.White,
+                            fontWeight = if (tab == 0) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 12.sp
+                        )
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = COLOR_TIMER_YELLOW,
+                        unselectedIconColor = Color.LightGray,
+                        selectedTextColor = Color.White,
+                        unselectedTextColor = Color.White,
+                        indicatorColor = Color(0xFF233044)
+                    )
                 )
+
+                // Вкладка "Полное расписание" с чисто белой надписью
                 NavigationBarItem(
                     selected = tab == 1,
                     onClick = { tab = 1 },
                     icon = { Icon(Icons.Default.ListAlt, "Полное расписание") },
-                    label = { Text("Полное расписание") }
+                    label = {
+                        Text(
+                            text = "Полное расписание",
+                            color = Color.White,
+                            fontWeight = if (tab == 1) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 12.sp
+                        )
+                    },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = COLOR_TIMER_YELLOW,
+                        unselectedIconColor = Color.LightGray,
+                        selectedTextColor = Color.White,
+                        unselectedTextColor = Color.White,
+                        indicatorColor = Color(0xFF233044)
+                    )
                 )
             }
         }
@@ -354,6 +454,12 @@ fun AppScreen() {
                                     modifier = Modifier.clickable {
                                         leadMin = mins
                                         prefs.edit().putInt("lead_min", mins).apply()
+                                        // Перезаводим все активные будильники под новое время
+                                        ScheduleRepository.events.forEach { ev ->
+                                            if (activeAlarms[ev.id] == true) {
+                                                scheduleExactAlarmClock(context, ev, mins)
+                                            }
+                                        }
                                     }
                                 ) {
                                     Text(
@@ -434,39 +540,13 @@ fun AppScreen() {
                                         activeAlarms[ev.id] = newState
                                         prefs.edit().putBoolean("alarm_${ev.id}", newState).apply()
 
-                                        try {
-                                            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-                                            val intent = Intent(context, AlarmReceiver::class.java).apply {
-                                                putExtra("EXTRA_TITLE", ev.title)
-                                                putExtra("EXTRA_LEAD", leadMin)
-                                                if (ev.iconResId != null) {
-                                                    putExtra("EXTRA_ICON_RES", ev.iconResId)
-                                                }
-                                            }
-                                            val pi = PendingIntent.getBroadcast(
-                                                context,
-                                                ev.id.hashCode(),
-                                                intent,
-                                                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-                                            )
-
-                                            if (newState) {
-                                                val triggerTime = next - (leadMin * 60 * 1000L)
-                                                if (triggerTime > System.currentTimeMillis()) {
-                                                    try {
-                                                        am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pi)
-                                                    } catch (_: SecurityException) {
-                                                        am.set(AlarmManager.RTC_WAKEUP, triggerTime, pi)
-                                                    }
-                                                    Toast.makeText(context, "Оповещение включено: ${ev.title} (за $leadMin мин)", Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    Toast.makeText(context, "Событие начнется быстрее, чем за $leadMin мин!", Toast.LENGTH_SHORT).show()
-                                                }
-                                            } else {
-                                                am.cancel(pi)
-                                                Toast.makeText(context, "Оповещение выключено: ${ev.title}", Toast.LENGTH_SHORT).show()
-                                            }
-                                        } catch (_: Throwable) {}
+                                        if (newState) {
+                                            scheduleExactAlarmClock(context, ev, leadMin)
+                                            Toast.makeText(context, "Будильник включен: ${ev.title} (за $leadMin мин)", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            cancelAlarmClock(context, ev.id)
+                                            Toast.makeText(context, "Будильник выключен: ${ev.title}", Toast.LENGTH_SHORT).show()
+                                        }
                                     }) {
                                         Icon(
                                             imageVector = if (isOn) Icons.Default.NotificationsActive else Icons.Default.Notifications,
