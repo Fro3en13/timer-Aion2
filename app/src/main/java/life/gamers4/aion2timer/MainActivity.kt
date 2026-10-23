@@ -12,7 +12,6 @@ import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
-import android.util.Base64
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -35,9 +34,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,7 +65,7 @@ data class GameSchedule(
     val title: String,
     val category: EventCategory,
     val scheduleDesc: String,
-    val iconBase64: String? = null,
+    val iconResId: Int? = null,
     val calculateNextEpochMillis: () -> Long
 )
 
@@ -81,26 +80,26 @@ object ScheduleRepository {
         GameSchedule("event_invasion", "Вторжение из измерения", EventCategory.EVENTS, "каждый час в :30") {
             getNextHourlyTime(30)
         },
-        // Дозорщик Кайра (HD-иконка берется из AppIcons.kt)
+        // Дозорщик Кайра (файл res/drawable/boss_kaira.png)
         GameSchedule(
             id = "boss_kaira_watcher",
             title = "Дозорщик Кайра",
             category = EventCategory.BOSSES,
             scheduleDesc = "каждые 3 ч, начиная с 01:00",
-            iconBase64 = ICON_KAIRA_WEBP
+            iconResId = R.drawable.boss_kaira
         ) {
             getNextIntervalTime(1, 3, 0)
         },
         GameSchedule("abyss_artifacts", "Захват артефактов", EventCategory.ABYSS, "пн, чт, сб в 21:00") {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 0)
         },
-        // Исполнитель Тамаса (HD-иконка берется из AppIcons.kt)
+        // Исполнитель Тамаса (файл res/drawable/boss_tamasa.png)
         GameSchedule(
             id = "boss_tamasa",
             title = "Исполнитель Тамаса",
             category = EventCategory.BOSSES,
             scheduleDesc = "пн, чт, сб в 21:30",
-            iconBase64 = ICON_TAMASA_WEBP
+            iconResId = R.drawable.boss_tamasa
         ) {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
@@ -168,7 +167,7 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val title = intent.getStringExtra("EXTRA_TITLE") ?: "Aion 2 Событие"
         val leadMin = intent.getIntExtra("EXTRA_LEAD", 5)
-        val iconB64 = intent.getStringExtra("EXTRA_ICON")
+        val iconResId = intent.getIntExtra("EXTRA_ICON_RES", 0)
         val channelId = "aion2_alert_channel"
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -203,11 +202,9 @@ class AlarmReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .setContentIntent(pi)
 
-        if (!iconB64.isNullOrEmpty()) {
+        if (iconResId != 0) {
             try {
-                val clean = iconB64.replace("\\s+".toRegex(), "")
-                val bytes = Base64.decode(clean, Base64.DEFAULT)
-                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                val bmp = BitmapFactory.decodeResource(context.resources, iconResId)
                 if (bmp != null) builder.setLargeIcon(bmp)
             } catch (_: Exception) {}
         }
@@ -272,7 +269,7 @@ fun AppScreen() {
         ) {
             if (tab == 0) {
                 Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
-                    // Верхняя панель: Надпись сервера слева, логотип Aion 2 справа
+                    // Верхняя панель: Надпись сервера слева, логотип из файла ic_logo.png справа
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -287,10 +284,10 @@ fun AppScreen() {
                             fontWeight = FontWeight.Bold
                         )
 
-                        // Логотип в правом верхнем углу
-                        Base64IconImage(
-                            base64Str = LOGO_AION2_WEBP,
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_logo),
                             contentDescription = "Aion 2 Логотип",
+                            contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .size(50.dp)
                                 .padding(end = 4.dp)
@@ -378,11 +375,12 @@ fun AppScreen() {
                                         )
                                     }
 
-                                    // Иконка босса
-                                    if (!ev.iconBase64.isNullOrEmpty()) {
-                                        Base64IconImage(
-                                            base64Str = ev.iconBase64,
+                                    // Прямая загрузка картинки босса из файла
+                                    if (ev.iconResId != null) {
+                                        Image(
+                                            painter = painterResource(id = ev.iconResId),
                                             contentDescription = ev.title,
+                                            contentScale = ContentScale.Fit,
                                             modifier = Modifier
                                                 .size(56.dp)
                                                 .padding(horizontal = 4.dp)
@@ -397,8 +395,8 @@ fun AppScreen() {
                                         val intent = Intent(context, AlarmReceiver::class.java).apply {
                                             putExtra("EXTRA_TITLE", ev.title)
                                             putExtra("EXTRA_LEAD", leadMin)
-                                            if (ev.iconBase64 != null) {
-                                                putExtra("EXTRA_ICON", ev.iconBase64)
+                                            if (ev.iconResId != null) {
+                                                putExtra("EXTRA_ICON_RES", ev.iconResId)
                                             }
                                         }
                                         val pi = PendingIntent.getBroadcast(
@@ -441,27 +439,6 @@ fun AppScreen() {
                 FullScheduleScreen()
             }
         }
-    }
-}
-
-@Composable
-fun Base64IconImage(base64Str: String, contentDescription: String?, modifier: Modifier = Modifier) {
-    val bitmap = remember(base64Str) {
-        try {
-            val clean = base64Str.replace("\\s+".toRegex(), "")
-            val bytes = Base64.decode(clean, Base64.DEFAULT)
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-        } catch (_: Exception) {
-            null
-        }
-    }
-    if (bitmap != null) {
-        Image(
-            bitmap = bitmap,
-            contentDescription = contentDescription,
-            contentScale = ContentScale.Fit,
-            modifier = modifier
-        )
     }
 }
 
