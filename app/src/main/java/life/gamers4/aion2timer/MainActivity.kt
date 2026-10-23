@@ -73,9 +73,17 @@ data class GameSchedule(
 
 object ScheduleRepository {
     val events = listOf(
-        GameSchedule("rift_continuum", "Разлом континуума", EventCategory.RIFTS, "каждые 3 ч, начиная с 02:00") {
+        // Разлом континуума (привязан файл rift_continuum.png)
+        GameSchedule(
+            id = "rift_continuum",
+            title = "Разлом континуума",
+            category = EventCategory.RIFTS,
+            scheduleDesc = "каждые 3 ч, начиная с 02:00",
+            iconResId = R.drawable.rift_continuum
+        ) {
             getNextIntervalTime(2, 3, 0)
         },
+        // События
         GameSchedule("event_shigo", "Фестиваль шиго", EventCategory.EVENTS, "каждый час в :00") {
             getNextHourlyTime(0)
         },
@@ -118,7 +126,7 @@ object ScheduleRepository {
         GameSchedule("boss_kaira_executor", "Исполнитель Кайра", EventCategory.BOSSES, "пн, чт, сб в 21:30") {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
-        // Лорд-хранитель Нахма (привязан файл boss_nahma.png)
+        // Лорд-хранитель Нахма
         GameSchedule(
             id = "boss_nahma",
             title = "Лорд-хранитель Нахма",
