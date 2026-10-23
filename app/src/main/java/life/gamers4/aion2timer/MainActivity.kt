@@ -82,6 +82,7 @@ object ScheduleRepository {
         GameSchedule("event_invasion", "Вторжение из измерения", EventCategory.EVENTS, "каждый час в :30") {
             getNextHourlyTime(30)
         },
+        // Дозорщик Кайра
         GameSchedule(
             id = "boss_kaira_watcher",
             title = "Дозорщик Кайра",
@@ -94,6 +95,7 @@ object ScheduleRepository {
         GameSchedule("abyss_artifacts", "Захват артефактов", EventCategory.ABYSS, "пн, чт, сб в 21:00") {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 0)
         },
+        // Исполнитель Тамаса
         GameSchedule(
             id = "boss_tamasa",
             title = "Исполнитель Тамаса",
@@ -103,18 +105,39 @@ object ScheduleRepository {
         ) {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
-        GameSchedule("boss_agro", "Исполнитель Агро", EventCategory.BOSSES, "пн, чт, сб в 21:30") {
+        // Исполнитель Агро
+        GameSchedule(
+            id = "boss_agro",
+            title = "Исполнитель Агро",
+            category = EventCategory.BOSSES,
+            scheduleDesc = "пн, чт, сб в 21:30",
+            iconResId = R.drawable.boss_agro
+        ) {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
         GameSchedule("boss_kaira_executor", "Исполнитель Кайра", EventCategory.BOSSES, "пн, чт, сб в 21:30") {
             getNextWeeklyTime(listOf(DayOfWeek.MONDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY), 21, 30)
         },
-        GameSchedule("boss_nahma", "Лорд-хранитель Нахма", EventCategory.BOSSES, "вс, пт в 21:00") {
+        // Лорд-хранитель Нахма (привязан файл boss_nahma.png)
+        GameSchedule(
+            id = "boss_nahma",
+            title = "Лорд-хранитель Нахма",
+            category = EventCategory.BOSSES,
+            scheduleDesc = "вс, пт в 21:00",
+            iconResId = R.drawable.boss_nahma
+        ) {
             getNextWeeklyTime(listOf(DayOfWeek.FRIDAY, DayOfWeek.SUNDAY), 21, 0)
         },
-        GameSchedule("boss_nahma_enraged", "Разъяренный лорд-хранитель Нахма", EventCategory.BOSSES, "вс, пт в 21:00") {
+        GameSchedule(
+            id = "boss_nahma_enraged",
+            title = "Разъяренный лорд-хранитель Нахма",
+            category = EventCategory.BOSSES,
+            scheduleDesc = "вс, пт в 21:00",
+            iconResId = R.drawable.boss_nahma
+        ) {
             getNextWeeklyTime(listOf(DayOfWeek.FRIDAY, DayOfWeek.SUNDAY), 21, 0)
         },
+        // События
         GameSchedule("event_arena", "Арена стратегии", EventCategory.EVENTS, "ежедневно в 11:00, 19:00") {
             getNextDailyTimes(listOf(11 to 0, 19 to 0))
         },
@@ -280,7 +303,7 @@ fun AppScreen() {
         ) {
             if (tab == 0) {
                 Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
-                    // Верхняя панель: Сервер слева, логотип справа
+                    // Верхняя панель: Сервер слева, логотип Aion 2 справа
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -456,7 +479,6 @@ fun AppScreen() {
     }
 }
 
-// Защищенная загрузка картинок: никогда не вызывает сбой приложения
 @Composable
 fun SafeIcon(resId: Int, contentDescription: String?, modifier: Modifier = Modifier) {
     val context = LocalContext.current
