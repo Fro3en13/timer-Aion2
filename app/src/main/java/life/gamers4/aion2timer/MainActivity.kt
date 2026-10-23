@@ -12,7 +12,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.media.AudioAttributes
-import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -159,7 +159,6 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Нажатие кнопки "ОК" под уведомлением
         if (intent.action == "ACTION_DISMISS_ALARM") {
             val notifId = intent.getIntExtra("EXTRA_NOTIF_ID", 0)
             if (notifId != 0) {
@@ -168,28 +167,28 @@ class AlarmReceiver : BroadcastReceiver() {
             return
         }
 
-        // Срабатывание будильника
         try {
             val eventId = intent.getStringExtra("EXTRA_ID") ?: return
             val title = intent.getStringExtra("EXTRA_TITLE") ?: "Aion 2 Событие"
             val leadMin = intent.getIntExtra("EXTRA_LEAD", 5)
             val iconResId = intent.getIntExtra("EXTRA_ICON_RES", 0)
-            val channelId = "aion2_alarm_clock_channel"
+            val channelId = "aion2_custom_music_channel"
+
+            // Подключаем вашу собственную мелодию aion2_sound.mp3
+            val soundUri = Uri.parse("android.resource://" + context.packageName + "/" + R.raw.aion2_sound)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
                 val audioAttributes = AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .build()
 
                 val channel = NotificationChannel(
                     channelId,
-                    "Aion 2 Будильник событий",
+                    "Aion 2 Оповещения со звуком",
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "Громкие оповещения о событиях"
+                    description = "Оповещения с официальной мелодией Aion 2"
                     enableVibration(true)
                     vibrationPattern = longArrayOf(0, 600, 250, 600, 250, 600)
                     setSound(soundUri, audioAttributes)
@@ -200,7 +199,6 @@ class AlarmReceiver : BroadcastReceiver() {
 
             val notifId = title.hashCode()
 
-            // Интент для кнопки "ОК"
             val dismissIntent = Intent(context, AlarmReceiver::class.java).apply {
                 action = "ACTION_DISMISS_ALARM"
                 putExtra("EXTRA_NOTIF_ID", notifId)
@@ -212,7 +210,6 @@ class AlarmReceiver : BroadcastReceiver() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            // Открытие приложения по клику на тело уведомления
             val openApp = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             }
@@ -230,7 +227,8 @@ class AlarmReceiver : BroadcastReceiver() {
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-                .setOngoing(true) // Нельзя смахнуть, пока не нажат "ОК"
+                .setSound(soundUri)
+                .setOngoing(true)
                 .setAutoCancel(false)
                 .setContentIntent(openPi)
                 .addAction(android.R.drawable.checkbox_on_background, "ОК", dismissPi)
@@ -244,7 +242,6 @@ class AlarmReceiver : BroadcastReceiver() {
 
             nm.notify(notifId, builder.build())
 
-            // Автоматически перезаводим будильник на следующий круг
             val ev = ScheduleRepository.events.firstOrNull { it.id == eventId }
             if (ev != null) {
                 scheduleExactAlarmClock(context, ev, leadMin)
@@ -253,7 +250,6 @@ class AlarmReceiver : BroadcastReceiver() {
     }
 }
 
-// Полноценный системный будильник (AlarmClockInfo): работает даже при закрытом приложении
 fun scheduleExactAlarmClock(context: Context, ev: GameSchedule, leadMin: Int) {
     try {
         val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
@@ -357,7 +353,6 @@ fun AppScreen() {
     Scaffold(
         bottomBar = {
             NavigationBar(containerColor = Color(0xFF131722)) {
-                // Вкладка "Таймеры" с чисто белой надписью
                 NavigationBarItem(
                     selected = tab == 0,
                     onClick = { tab = 0 },
@@ -379,7 +374,6 @@ fun AppScreen() {
                     )
                 )
 
-                // Вкладка "Полное расписание" с чисто белой надписью
                 NavigationBarItem(
                     selected = tab == 1,
                     onClick = { tab = 1 },
@@ -411,7 +405,6 @@ fun AppScreen() {
         ) {
             if (tab == 0) {
                 Column(modifier = Modifier.fillMaxSize().padding(14.dp)) {
-                    // Верхняя панель: Сервер слева, логотип Aion 2 справа
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -454,7 +447,6 @@ fun AppScreen() {
                                     modifier = Modifier.clickable {
                                         leadMin = mins
                                         prefs.edit().putInt("lead_min", mins).apply()
-                                        // Перезаводим все активные будильники под новое время
                                         ScheduleRepository.events.forEach { ev ->
                                             if (activeAlarms[ev.id] == true) {
                                                 scheduleExactAlarmClock(context, ev, mins)
