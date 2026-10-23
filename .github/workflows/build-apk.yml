@@ -29,9 +29,9 @@ jobs:
           mkdir -p app/src/main/res/drawable
           python3 -c "
           import re, base64
-          with open('app/src/main/java/life/gamers4/aion2timer/MainActivity.kt') as f:
+          with open('app/src/main/java/life/gamers4/aion2timer/AppIcons.kt') as f:
               content = f.read()
-          m = re.search(r'const val LOGO_AION2_WEBP = \"([^\"]+)\"', content)
+          m = re.search(r'LOGO_AION2_WEBP = \"([^\"]+)\"', content)
           if m:
               with open('app/src/main/res/drawable/ic_launcher.webp', 'wb') as out:
                   out.write(base64.b64decode(m.group(1).strip()))
